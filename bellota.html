@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Bellota Gym Run 💚</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #000;
+    height: 100%;
+    touch-action: manipulation;
+  }
+
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    background: url('https://raw.githubusercontent.com/valenexe24/Bellota-Gymrat/main/gym.jpg') center/cover no-repeat;
+  }
+
+  #messageBox {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.85);
+    color: #00ff66;
+    font-family: monospace;
+    font-size: 1.5em;
+    padding: 25px 40px;
+    border-radius: 15px;
+    text-align: center;
+    display: none;
+    z-index: 10;
+    box-shadow: 0 0 15px #00ff66;
+  }
+
+  #touchArea {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+  }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="messageBox"></div>
+<div id="touchArea"></div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const messageBox = document.getElementById("messageBox");
+const touchArea = document.getElementById("touchArea");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const gravity = 0.8;
+let gameSpeed = 8;
+let score = 0;
+let lives = 3;
+let gameOver = false;
+
+const player = {
+  x: 80,
+  y: 0,
+  width: 80,
+  height: 80,
+  dy: 0,
+  jumping: false,
+  img: new Image(),
+};
+player.img.src = "https://raw.githubusercontent.com/valenexe24/Bellota-Gymrat/main/Buttercup.jpg";
+
+const ground = {
+  y: canvas.height - 100,
+  height: 100,
+};
+
+let obstacles = [];
+
+function createObstacle() {
+  const size = Math.random() * 20 + 40;
+  obstacles.push({
+    x: canvas.width,
+    y: ground.y - size,
+    width: size * 1.2,
+    height: size,
+  });
+}
+
+function drawGround() {
+  ctx.fillStyle = "#2d2d2d";
+  ctx.fillRect(0, ground.y, canvas.width, ground.height);
+  ctx.strokeStyle = "#555";
+  for (let i = 0; i < canvas.width; i += 40) {
+    ctx.beginPath();
+    ctx.moveTo(i, ground.y);
+    ctx.lineTo(i + 20, ground.y + ground.height);
+    ctx.stroke();
+  }
+}
+
+function drawPlayer() {
+  ctx.drawImage(player.img, player.x, player.y, player.width, player.height);
+}
+
+function drawObstacles() {
+  ctx.fillStyle = "#aaa";
+  obstacles.forEach(ob => {
+    ctx.fillRect(ob.x, ob.y, ob.width, ob.height);
+    ctx.fillStyle = "#444";
+    ctx.fillRect(ob.x + ob.width * 0.1, ob.y + ob.height * 0.3, ob.width * 0.8, ob.height * 0.4);
+  });
+}
+
+function updatePlayer() {
+  if (player.jumping) {
+    player.dy += gravity;
+    player.y += player.dy;
+
+    if (player.y > ground.y - player.height) {
+      player.y = ground.y - player.height;
+      player.dy = 0;
+      player.jumping = false;
+    }
+  }
+}
+
+function updateObstacles() {
+  obstacles.forEach(ob => ob.x -= gameSpeed);
+  if (obstacles.length === 0 || obstacles[obstacles.length - 1].x < canvas.width - 300) {
+    createObstacle();
+  }
+  obstacles = obstacles.filter(ob => ob.x + ob.width > 0);
+}
+
+function detectCollision() {
+  obstacles.forEach((ob, i) => {
+    if (
+      player.x < ob.x + ob.width &&
+      player.x + player.width > ob.x &&
+      player.y + player.height > ob.y
+    ) {
+      obstacles.splice(i, 1);
+      loseLife();
+    }
+  });
+}
+
+function loseLife() {
+  lives--;
+  if (lives <= 0) {
+    endGame();
+  } else {
+    resetAfterHit();
+  }
+}
+
+function resetAfterHit() {
+  player.y = ground.y - player.height;
+  player.dy = 0;
+  player.jumping = false;
+}
+
+function endGame() {
+  gameOver = true;
+  showMessage();
+}
+
+function showMessage() {
+  const foods = [
+    "budín de zanahoria 🍰",
+    "pastas caseras 🍝",
+    "pepas con membrillo 🍪",
+    "galletitas de avena 🥣",
+    "alfajores de maicena 🧁",
+    "pepas con chocolate 🍫"
+  ];
+  messageBox.style.display = "block";
+  let time = 0;
+  const interval = setInterval(() => {
+    messageBox.textContent = "PERDISTE 💚 Tenés que cocinarme... " + foods[Math.floor(Math.random() * foods.length)];
+    time += 100;
+    if (time >= 3000) {
+      clearInterval(interval);
+      const finalFood = foods[Math.floor(Math.random() * foods.length)];
+      messageBox.textContent = "PERDISTE 💚 Tenés que cocinarme... " + finalFood;
+    }
+  }, 150);
+}
+
+function drawHUD() {
+  ctx.fillStyle = "#00ff66";
+  ctx.font = "bold 20px monospace";
+  ctx.fillText("Score: " + score, 20, 30);
+  ctx.fillText("Vidas: " + lives, 20, 60);
+}
+
+function jump() {
+  if (!player.jumping && !gameOver) {
+    player.jumping = true;
+    player.dy = -18;
+  }
+}
+
+touchArea.addEventListener("touchstart", jump);
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space") jump();
+});
+
+function gameLoop() {
+  if (gameOver) return;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawGround();
+  drawPlayer();
+  drawObstacles();
+  drawHUD();
+
+  updatePlayer();
+  updateObstacles();
+  detectCollision();
+
+  score++;
+  if (score % 400 === 0) gameSpeed += 0.5;
+
+  requestAnimationFrame(gameLoop);
+}
+
+player.y = ground.y - player.height;
+createObstacle();
+gameLoop();
+</script>
+</body>
+</html>
