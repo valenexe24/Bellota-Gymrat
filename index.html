@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Bellota Gym Run 💚</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #000;
+    height: 100%;
+    touch-action: none;
+  }
+
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    background: url('https://raw.githubusercontent.com/valenexe24/Bellota-Gymrat/main/gym.jpg') center/cover no-repeat;
+  }
+
+  #messageBox, #startText {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #00ff66;
+    font-family: monospace;
+    text-align: center;
+    text-shadow: 0 0 10px #00ff66;
+  }
+
+  #messageBox {
+    top: 45%;
+    background: rgba(0,0,0,0.85);
+    font-size: 1.3em;
+    padding: 25px 40px;
+    border-radius: 15px;
+    display: none;
+    box-shadow: 0 0 15px #00ff66;
+  }
+
+  #startText {
+    top: 50%;
+    font-size: 1.8em;
+    animation: blink 1s infinite;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="messageBox"></div>
+<div id="startText">💚 Tocá la pantalla para empezar 💚</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const messageBox = document.getElementById("messageBox");
+const startText = document.getElementById("startText");
+
+// Ajuste retina (iPhone)
+const DPR = window.devicePixelRatio || 1;
+canvas.width = window.innerWidth * DPR;
+canvas.height = window.innerHeight * DPR;
+ctx.scale(DPR, DPR);
+
+const gravity = 0.7;
+let gameSpeed = 6;
+let score = 0;
+let lives = 3;
+let started = false;
+let gameOver = false;
+let scale = (window.innerHeight / 800);
+
+// 🟢 Bellota
+const player = {
+  x: 80 * scale,
+  y: 0,
+  width: 70 * scale,
+  height: 70 * scale,
+  dy: 0,
+  jumping: false,
+  jumpScale: 1,
+  img: new Image(),
+};
+player.img.src = "https://raw.githubusercontent.com/valenexe24/Bellota-Gymrat/main/Buttercup.jpg";
+
+// 🟫 Piso
+const ground = {
+  y: window.innerHeight - 100 * scale,
+  height: 100 * scale,
+};
+
+// 🏋️ Obstáculos (mancuernas verticales)
+let obstacles = [];
+let lastObstacleTime = 0;
+
+function createObstacle() {
+  const now = Date.now();
+  if (now - lastObstacleTime < 1600) return;
+  const size = 35 * scale;
+  obstacles.push({
+    x: window.innerWidth,
+    y: ground.y - size * 2,
+    width: size,
+    height: size * 2,
+  });
+  lastObstacleTime = now;
+}
+
+function drawGround() {
+  ctx.fillStyle = "#222";
+  ctx.fillRect(0, ground.y, window.innerWidth, ground.height);
+  ctx.strokeStyle = "#333";
+  for (let i = 0; i < window.innerWidth; i += 40 * scale) {
+    ctx.beginPath();
+    ctx.moveTo(i, ground.y);
+    ctx.lineTo(i + 20 * scale, ground.y + ground.height);
+    ctx.stroke();
+  }
+}
+
+function drawPlayer() {
+  ctx.save();
+  ctx.translate(player.x + player.width / 2, player.y + player.height / 2);
+  ctx.scale(player.jumpScale, player.jumpScale);
+  ctx.drawImage(player.img, -player.width / 2, -player.height / 2, player.width, player.height);
+  ctx.restore();
+}
+
+function drawObstacles() {
+  obstacles.forEach(ob => {
+    const centerX = ob.x + ob.width / 2;
+    const bottomY = ob.y + ob.height;
+
+    // barra vertical
+    ctx.fillStyle = "#777";
+    ctx.fillRect(centerX - ob.width * 0.15, ob.y, ob.width * 0.3, ob.height);
+
+    // discos arriba y abajo
+    ctx.fillStyle = "#333";
+    ctx.beginPath();
+    ctx.arc(centerX, ob.y + 5 * scale, ob.width * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(centerX, bottomY - 5 * scale, ob.width * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // borde metálico
+    ctx.strokeStyle = "#999";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(centerX, ob.y + 5 * scale, ob.width * 0.5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(centerX, bottomY - 5 * scale, ob.width * 0.5, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+}
+
+function updatePlayer() {
+  if (player.jumping) {
+    player.dy += gravity;
+    player.y += player.dy;
+    player.jumpScale = 1 + Math.sin(Date.now() / 150) * 0.05;
+    if (player.y > ground.y - player.height) {
+      player.y = ground.y - player.height;
+      player.dy = 0;
+      player.jumping = false;
+      player.jumpScale = 1;
+    }
+  }
+}
+
+function updateObstacles() {
+  obstacles.forEach(ob => ob.x -= gameSpeed);
+  if (obstacles.length === 0 || obstacles[obstacles.length - 1].x < window.innerWidth - 400 * scale) {
+    createObstacle();
+  }
+  obstacles = obstacles.filter(ob => ob.x + ob.width > 0);
+}
+
+function detectCollision() {
+  obstacles.forEach((ob, i) => {
+    if (
+      player.x < ob.x + ob.width &&
+      player.x + player.width > ob.x &&
+      player.y + player.height > ob.y
+    ) {
+      obstacles.splice(i, 1);
+      loseLife();
+    }
+  });
+}
+
+function loseLife() {
+  lives--;
+  if (lives <= 0) endGame();
+}
+
+function endGame() {
+  gameOver = true;
+  showMessage();
+}
+
+function showMessage() {
+  const foods = [
+    "budín de zanahoria 🍰",
+    "pastas caseras 🍝",
+    "pepas con membrillo 🍪",
+    "galletitas de avena 🥣",
+    "alfajores de maicena 🧁",
+    "pepas con chocolate 🍫"
+  ];
+  messageBox.style.display = "block";
+  let time = 0;
+  const interval = setInterval(() => {
+    messageBox.textContent = "PERDISTE 💚 Tenés que cocinarme... " + foods[Math.floor(Math.random() * foods.length)];
+    time += 100;
+    if (time >= 3000) {
+      clearInterval(interval);
+      const finalFood = foods[Math.floor(Math.random() * foods.length)];
+      messageBox.textContent = "PERDISTE 💚 Tenés que cocinarme... " + finalFood;
+    }
+  }, 150);
+}
+
+function drawHUD() {
+  ctx.fillStyle = "#00ff66";
+  ctx.font = `${18 * scale}px monospace`;
+  ctx.fillText("Score: " + score, 20 * scale, 30 * scale);
+  ctx.fillText("Vidas: " + lives, 20 * scale, 60 * scale);
+}
+
+function jump(e) {
+  e.preventDefault();
+  if (!started) {
+    started = true;
+    startText.style.display = "none";
+    gameLoop();
+    return;
+  }
+  if (!player.jumping && !gameOver) {
+    player.jumping = true;
+    player.dy = -18 * scale;
+  }
+}
+
+// 🔧 eventos multiplataforma
+canvas.addEventListener("touchstart", jump, { passive: false });
+canvas.addEventListener("mousedown", jump);
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space") jump(e);
+});
+
+function gameLoop() {
+  if (gameOver) return;
+
+  ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  drawGround();
+  drawPlayer();
+  drawObstacles();
+  drawHUD();
+
+  updatePlayer();
+  updateObstacles();
+  detectCollision();
+
+  score++;
+  if (score % 600 === 0) gameSpeed += 0.3;
+
+  requestAnimationFrame(gameLoop);
+}
+
+// inicializar
+player.y = ground.y - player.height;
+createObstacle();
+</script>
+</body>
+</html>
